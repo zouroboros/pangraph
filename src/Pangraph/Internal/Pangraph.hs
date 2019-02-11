@@ -2,58 +2,65 @@ module Pangraph.Internal.Pangraph where
 
 import qualified Data.Set as S
 import qualified Data.Foldable as F
-import qualified Data.Map as M
 
-type Arrow a b e = (a, b, e)
+data None a = None
+
+instance Foldable None where
+  foldMap _ = mempty
+  foldr _ z _ = z
+
+type Directed a b e = (a, b, e)
+type Undirected a b e = (a, b, e)
 
 -- | Base type for graphs, v is the vertex type,
 -- uc the container for undirected edges,
--- ac the container for directed edges (arrows).
-type Graph v uc ac = (S.Set (v, uc), ac)
+-- dc the container for directed edges (arrows).
+type Graph v uc dc = (S.Set v, uc, dc)
 
 -- | Type for an undirected graph
 -- v is the type of the vertices
 -- e the type of the edges.
-type UndirectedGraph v e = Graph v (S.Set (v, e)) ()
+type UndirectedGraph v e = Graph v (S.Set (Undirected v v e)) (None (Directed v v e))
 
 -- | Type for an directed graph.
-type DirectedGraph v e = Graph v () (S.Set (Arrow v v e))
+type DirectedGraph v e = Graph v (None (Undirected v v e)) (S.Set (Directed v v e))
 
 -- | Type for a mixed graph. A mixed graph is a grap containing directed as well
 -- as undirected edges.
-type MixedGraph v e = Graph v (S.Set (v, e)) (S.Set (Arrow v v e))
+type MixedGraph v e = Graph v (S.Set (Undirected v v e)) (S.Set (Directed v v e))
 
 -- | Multigraph type. A multigraph is a graph that contains multiple undirected
 -- edges between two vertices.
-type MultiGraph v e = Graph v [(v, e)] ()
+type MultiGraph v e = Graph v [Undirected v v e] (None (Directed v v e))
 
 -- | A quiver is graph that contains multiple directed edges between two vertices.
-type Quiver v e = Graph v () [Arrow v v e]
+type Quiver v e = Graph v (None (Undirected v v e)) [Directed v v e]
 
 -- | Mixed quiver: a graph that can contain multiple, directed or undirected,
 -- edges between two graphs.
-type MixedQuiver v e = Graph v [(v, e)] [Arrow v v e]
+type MixedQuiver v e = Graph v [Undirected v v e] [Directed v v e]
+
+-- | HyperQuiver is a graph where nodes can contain multiple nodes and edges can
+-- have multiple endpoints.
+type HyperQuiver v e = MixedQuiver (S.Set v) e
 
 -- | All the vertices in the graph
-vertices :: Ord v => Graph v ec ac -> S.Set v
-vertices = (S.map fst) . fst
+vertices :: Graph v uc dc -> S.Set v
+vertices (v, _, _) = v
 
 -- | All undirected vertices in a graph. The resulting map assigns to each vertex
 -- a container with of the connected vertices.
-undirected :: Eq v => Graph v ec ac -> M.Map v ec
-undirected = M.fromAscList . S.toAscList . fst
+undirected :: Graph v uc dc -> uc
+undirected (_, uc, _) = uc
 
 -- | All directed vertices.
-directed :: Graph v ec ac -> ac
-directed = snd
+directed :: Graph v uc dc -> dc
+directed (_, _, dc) = dc
 
--- | All edges from the graph. Undirected edges will be converted to directed
--- edges
-allEdges :: (Foldable ec, Ord v, Ord e, Ord (ec (v, e)), Foldable ac) =>
-  Graph v (ec (v, e)) (ac (v, v, e)) -> [(v, v, e)]
+-- | All edges from the graph.
+allEdges :: (Foldable uc, Foldable dc) =>
+  Graph v (uc (Undirected v v e)) (dc (Directed v v e)) -> [(v, v, e, Bool)]
 allEdges graph = let
-  undirected' = S.fromList $ M.toList $ undirected graph
-  edges2Arrows v1 edges = map (\(v2, e) -> (v1, v2, e)) (F.toList edges)
-  undirected'' = F.toList (S.map (uncurry edges2Arrows) undirected')
-  directed' = F.toList $ directed graph
-  in directed' ++ concat undirected''
+  undirected' = map (\(a, b, e) -> (a, b, e, False)) $ F.toList $ undirected graph
+  directed' = map (\(a, b, e) -> (a, b, e, True)) $ F.toList $ directed graph
+  in directed' ++ undirected'
