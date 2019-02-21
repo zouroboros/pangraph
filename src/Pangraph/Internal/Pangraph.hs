@@ -3,9 +3,13 @@ module Pangraph.Internal.Pangraph where
 import qualified Data.Set as S
 
 type Directed a b e = (a, b, e)
-type Undirected a b e = (a, b, e)
+data Undirected a e = Undirected a a e
 
-data MixedEdge a b e = D (Directed a b e) | U (Undirected a b e)
+instance (Eq a, Eq c) => Eq (Undirected a c) where
+  (Undirected a1 b1 e1) == (Undirected a2 b2 e2) =
+      e1 == e2 && ((a1 == a2) && (b1 == b2)) || ((a1 == b2) && (b1 == a2))
+
+data MixedEdge a b e = D (Directed a b e) | U (Undirected a e)
 
 -- | Base type for graphs, v is the vertex type,
 -- uc the container for undirected edges,
@@ -15,7 +19,7 @@ type Graph v ec = (S.Set v, ec)
 -- | Type for an undirected graph
 -- v is the type of the vertices
 -- e the type of the edges.
-type UndirectedGraph v e = Graph v (S.Set (Undirected v v e))
+type UndirectedGraph v e = Graph v (S.Set (Undirected v e))
 
 -- | Type for an directed graph.
 type DirectedGraph v e = Graph v (S.Set (Directed v v e))
@@ -26,7 +30,7 @@ type MixedGraph v e = Graph v (S.Set (MixedEdge v v e))
 
 -- | Multigraph type. A multigraph is a graph that contains multiple undirected
 -- edges between two vertices.
-type MultiGraph v e = Graph v [Undirected v v e]
+type MultiGraph v e = Graph v [Undirected v e]
 
 -- | A quiver is graph that contains multiple directed edges between two vertices.
 type Quiver v e = Graph v [Directed v v e]
